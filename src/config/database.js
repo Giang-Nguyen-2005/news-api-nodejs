@@ -10,6 +10,7 @@ if (filename !== ':memory:') {
 }
 
 const database = new Database(filename);
+database.pragma('foreign_keys = ON');
 
 database.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -18,7 +19,19 @@ database.exec(`
     email TEXT NOT NULL COLLATE NOCASE UNIQUE,
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )
+  );
+
+  CREATE TABLE IF NOT EXISTS news (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    content TEXT NOT NULL CHECK (length(trim(content)) > 0),
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS news_created_at_id_idx ON news(created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS news_author_id_idx ON news(author_id);
 `);
 
 module.exports = database;

@@ -1,8 +1,9 @@
 # News Management Backend API
 
-Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 3: dang ky, dang nhap va JWT.
+Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 4: API public doc tin tuc.
 Su dung JavaScript, Node.js, Express, SQLite (better-sqlite3), bcryptjs va jsonwebtoken.
-Chua trien khai API tin tuc, upload hoac frontend.
+Da co dang ky, dang nhap, JWT va API doc tin tuc. Chua co API them/sua/xoa tin,
+tim kiem hay sap xep tuy chinh, upload hoac frontend.
 
 ## Chay local
 
@@ -56,9 +57,11 @@ src/
   controllers/
     healthController.js
     authController.js
+    newsController.js
   routes/
     healthRoutes.js
     authRoutes.js
+    newsRoutes.js
   middlewares/
     .gitkeep
     notFound.js
@@ -68,9 +71,11 @@ src/
   models/
     .gitkeep
     userModel.js
+    newsModel.js
   services/
     .gitkeep
     authService.js
+    newsService.js
   utils/
     .gitkeep
     response.js
@@ -78,6 +83,7 @@ src/
 test/
   app.test.js
   auth.test.js
+  news.test.js
 data/                  # Database local tu tao, khong commit
 .env.example
 .gitignore
@@ -279,3 +285,127 @@ Invoke-RestMethod http://localhost:3000/api/auth/me -Headers @{ Authorization = 
 Database test tach rieng trong bo nho, khong mo hoac xoa database su dung thuc te.
 Test bao gom validation, trung tai khoan (ke ca request dong thoi), bcrypt,
 JWT co han, token sai/het han, response khong chua hash, va loi database 500.
+
+## Bang news (giai doan 4)
+
+Bang duoc bo sung bang `CREATE TABLE IF NOT EXISTS` trong database SQLite hien co.
+Khong xoa/tao lai bang users, khong them du lieu tin tuc mau vao database local.
+
+| Cot | Kieu va rang buoc |
+| --- | --- |
+| id | INTEGER PRIMARY KEY AUTOINCREMENT |
+| title | TEXT NOT NULL, CHECK khong rong sau khi trim |
+| content | TEXT NOT NULL, CHECK khong rong sau khi trim |
+| author_id | INTEGER NOT NULL, FOREIGN KEY den users(id), ON DELETE RESTRICT |
+| created_at | TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP (UTC) |
+| updated_at | TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP (UTC) |
+
+Bat `PRAGMA foreign_keys = ON` tren connection. Co index theo
+`created_at DESC, id DESC` cho danh sach va index `author_id`.
+`updated_at` hien duoc gan luc tao; API sua o giai doan sau can cap nhat cot nay.
+Giai doan nay khong co API ghi du lieu.
+
+## API public doc tin tuc
+
+Hai endpoint deu khong can JWT. `author` chi co `id`, `username`, khong tra email,
+password hay password_hash. SQL dung placeholder cho ID, LIMIT va OFFSET.
+
+| Method | Endpoint | Ket qua |
+| --- | --- | --- |
+| GET | /api/news?page=1&limit=10 | 200, danh sach va thong tin phan trang |
+| GET | /api/news/:id | 200, chi tiet tin tuc |
+
+### Danh sach
+
+```powershell
+curl.exe -i 'http://localhost:3000/api/news?page=1&limit=10'
+```
+
+Mac dinh `page=1`, `limit=10`. Ca hai phai la chuoi so nguyen duong, khong chap
+nhan so thap phan, so am, ky tu la hay tham so lap. `limit` toi da 100; page, id
+va offset phai trong mien so nguyen an toan cua JavaScript. Gia tri khong hop le
+tra HTTP 400. Tin moi nhat truoc theo `created_at DESC`, cung thoi diem thi `id DESC`.
+
+Vi du HTTP 200 khi co du lieu (du lieu minh hoa, khong duoc seed vao database):
+
+```json
+{
+  "success": true,
+  "message": "Lay danh sach tin tuc thanh cong",
+  "data": {
+    "news": [
+      {
+        "id": 1,
+        "title": "Tieu de tin tuc",
+        "content": "Noi dung tin tuc",
+        "author": { "id": 1, "username": "giang" },
+        "created_at": "2026-10-26 10:00:00",
+        "updated_at": "2026-10-26 10:00:00"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+Database chua co tin tuc van tra HTTP 200:
+
+```json
+{
+  "success": true,
+  "message": "Lay danh sach tin tuc thanh cong",
+  "data": {
+    "news": [],
+    "pagination": { "page": 1, "limit": 10, "total": 0, "totalPages": 0 }
+  }
+}
+```
+
+Page vuot trang cuoi tra `news: []` va giu nguyen `total`, `totalPages`.
+
+### Chi tiet
+
+```powershell
+curl.exe -i http://localhost:3000/api/news/1
+```
+
+HTTP 200 khi ID ton tai:
+
+```json
+{
+  "success": true,
+  "message": "Lay chi tiet tin tuc thanh cong",
+  "data": {
+    "news": {
+      "id": 1,
+      "title": "Tieu de tin tuc",
+      "content": "Noi dung tin tuc",
+      "author": { "id": 1, "username": "giang" },
+      "created_at": "2026-10-26 10:00:00",
+      "updated_at": "2026-10-26 10:00:00"
+    }
+  }
+}
+```
+
+ID khong hop le (vi du `/api/news/abc`, `/api/news/0`) tra HTTP 400:
+
+```json
+{"success":false,"message":"ID khong hop le","data":null,"errors":null}
+```
+
+ID hop le nhung khong ton tai tra HTTP 404:
+
+```json
+{"success":false,"message":"Khong tim thay tin tuc","data":null,"errors":null}
+```
+
+Loi database bat ngo dung middleware hien co, tra HTTP 500 `Loi server`, khong
+lo truy van hoac stack trace. `/api/news/` la danh sach; chi tiet can co `:id`.
+
+### Test tin tuc
+
+`test/news.test.js` dung SQLite `:memory:` rieng va du lieu mau chi trong test.
+Test danh sach rong/co du lieu, thu tu on dinh, chi tiet, phan trang, ID khong
+hop le/khong ton tai, API public, khong lo thong tin rieng, khoa ngoai va loi 500.
+`npm test` chay ca test news va toan bo test giai doan 2, 3.
