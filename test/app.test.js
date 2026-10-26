@@ -1,9 +1,18 @@
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
-const { test } = require('node:test');
+const { test, after } = require('node:test');
+const { randomBytes } = require('node:crypto');
+
+// Set before importing the app: never open the real database during tests.
+process.env.NODE_ENV = 'test';
+process.env.DB_PATH = ':memory:';
+process.env.JWT_SECRET = randomBytes(32).toString('hex');
 const express = require('express');
 const app = require('../src/app');
 const errorHandler = require('../src/middlewares/errorHandler');
+const database = require('../src/config/database');
+
+after(() => database.close());
 
 async function withServer(application, run) {
   const server = application.listen(0, '127.0.0.1');
