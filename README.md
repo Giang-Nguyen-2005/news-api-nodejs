@@ -1,9 +1,9 @@
 # News Management Backend API
 
-Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 4: API public doc tin tuc.
+Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 5: API private them/sua/xoa tin tuc.
 Su dung JavaScript, Node.js, Express, SQLite (better-sqlite3), bcryptjs va jsonwebtoken.
-Da co dang ky, dang nhap, JWT va API doc tin tuc. Chua co API them/sua/xoa tin,
-tim kiem hay sap xep tuy chinh, upload hoac frontend.
+Da co dang ky, dang nhap, JWT, API doc public va API ghi tin tuc theo quyen tac gia.
+Chua co tim kiem hay sap xep tuy chinh, upload hoac frontend.
 
 ## Chay local
 
@@ -84,6 +84,7 @@ test/
   app.test.js
   auth.test.js
   news.test.js
+  news-write.test.js
 data/                  # Database local tu tao, khong commit
 .env.example
 .gitignore
@@ -302,8 +303,8 @@ Khong xoa/tao lai bang users, khong them du lieu tin tuc mau vao database local.
 
 Bat `PRAGMA foreign_keys = ON` tren connection. Co index theo
 `created_at DESC, id DESC` cho danh sach va index `author_id`.
-`updated_at` hien duoc gan luc tao; API sua o giai doan sau can cap nhat cot nay.
-Giai doan nay khong co API ghi du lieu.
+`updated_at` duoc gan luc tao va cap nhat theo UTC khi sua thanh cong. API PUT
+dung do chinh xac mili giay. `created_at` va `author_id` khong thay doi khi sua.
 
 ## API public doc tin tuc
 
@@ -409,3 +410,115 @@ lo truy van hoac stack trace. `/api/news/` la danh sach; chi tiet can co `:id`.
 Test danh sach rong/co du lieu, thu tu on dinh, chi tiet, phan trang, ID khong
 hop le/khong ton tai, API public, khong lo thong tin rieng, khoa ngoai va loi 500.
 `npm test` chay ca test news va toan bo test giai doan 2, 3.
+
+## API private ghi tin tuc (giai doan 5)
+
+Dang nhap qua `POST /api/auth/login`, lay `data.accessToken` va gui header:
+
+```http
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+| Method | Endpoint | Thanh cong |
+| --- | --- | --- |
+| POST | /api/news | 201, `data.news` chua tin vua tao |
+| PUT | /api/news/:id | 200, `data.news` chua tin da sua |
+| DELETE | /api/news/:id | 200, `data.id` la ID vua xoa |
+
+POST va PUT can ca `title` va `content`, deu phai la chuoi khong rong sau khi
+trim; server luu gia tri da trim. PUT cap nhat ca hai truong. Thieu body, sai
+kieu hoac chuoi chi co khoang trang tra 400. Chi title/content duoc lay tu body;
+author_id luon lay tu `req.user.id` do middleware JWT xac thuc. Client khong the
+gan tac gia, doi tac gia, doi id hay thoi gian tao qua body.
+
+Thieu, sai hoac het han JWT tra 401. ID sai tra 400. Tin khong ton tai tra 404.
+Tai khoan khac tac gia khong duoc sua/xoa, tra 403 va khong thay doi du lieu.
+Loi database bat ngo tra 500 `Loi server`, khong gui SQL hoac stack trace.
+GET danh sach/chi tiet van public va khong can Authorization.
+
+### Them tin
+
+```http
+POST /api/news
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{"title":"Tin moi","content":"Noi dung tin moi"}
+```
+
+HTTP 201 (id va thoi gian la vi du):
+
+```json
+{
+  "success": true,
+  "message": "Them tin tuc thanh cong",
+  "data": {
+    "news": {
+      "id": 1,
+      "title": "Tin moi",
+      "content": "Noi dung tin moi",
+      "author": { "id": 1, "username": "giang" },
+      "created_at": "2026-10-26 10:00:00",
+      "updated_at": "2026-10-26 10:00:00"
+    }
+  }
+}
+```
+
+### Sua tin cua minh
+
+```http
+PUT /api/news/1
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{"title":"Tieu de da sua","content":"Noi dung da sua"}
+```
+
+HTTP 200 co `success: true`, message `Sua tin tuc thanh cong`, `data.news`
+co cau truc nhu response them tin, title/content moi va updated_at da cap nhat.
+
+Vi du HTTP 403 neu tai khoan khac sua:
+
+```json
+{"success":false,"message":"Ban khong co quyen sua tin tuc nay","data":null,"errors":null}
+```
+
+### Xoa tin cua minh
+
+```http
+DELETE /api/news/1
+Authorization: Bearer <accessToken>
+```
+
+HTTP 200:
+
+```json
+{"success":true,"message":"Xoa tin tuc thanh cong","data":{"id":1}}
+```
+
+### Quyen so huu va transaction
+
+Model sua/xoa bang SQL parameterized voi `WHERE id = ? AND author_id = ?`.
+Moi thao tac chay trong transaction `IMMEDIATE` (giu write lock) gom ghi,
+kiem tra ton tai de phan biet 403/404 va doc lai ket qua. Khong co khoang trong
+giua kiem tra quyen va thao tac de connection khac thay doi quyen so huu.
+Neu co loi, SQLite rollback transaction; middleware cu tra response loi chung.
+
+### Thu bang PowerShell sau khi dang nhap
+
+```powershell
+$headers = @{ Authorization = "Bearer $($login.data.accessToken)" }
+$body = @{ title = 'Tin moi'; content = 'Noi dung tin moi' } | ConvertTo-Json
+$created = Invoke-RestMethod http://localhost:3000/api/news -Method Post -Headers $headers -ContentType 'application/json' -Body $body
+$id = $created.data.news.id
+$updatedBody = @{ title = 'Tieu de da sua'; content = 'Noi dung da sua' } | ConvertTo-Json
+Invoke-RestMethod "http://localhost:3000/api/news/$id" -Method Put -Headers $headers -ContentType 'application/json' -Body $updatedBody
+Invoke-RestMethod "http://localhost:3000/api/news/$id" -Method Delete -Headers $headers
+```
+
+`test/news-write.test.js` dung SQLite trong bo nho rieng, hai tai khoan test
+va JWT ky bang secret ngau nhien. Test ca quyen so huu, body gia mao author_id,
+du lieu sai, token thieu/sai/het han, updated_at, rollback va GET public.
+Chay `npm test` de chay ca test ghi va baseline 62 test cua giai doan 4.
