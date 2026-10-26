@@ -1,8 +1,7 @@
+const { sendSuccess } = require('../utils/response');
+
 function getHealth(req, res) {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Server is running',
-  });
+  return sendSuccess(res, 'Server is running', { status: 'ok' });
 }
 
 module.exports = { getHealth };

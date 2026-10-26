@@ -1,8 +1,8 @@
-const { port } = require('./config/env');
+const { port, nodeEnv } = require('./config/env');
 const app = require('./app');
 
 const server = app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on port ${port} (${nodeEnv})`);
 });
 
 server.on('error', (error) => {
