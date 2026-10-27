@@ -1,83 +1,106 @@
 # News Management Backend API
 
-Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 6: tim kiem va sap xep tin tuc.
-Su dung JavaScript, Node.js, Express, SQLite (better-sqlite3), bcryptjs va jsonwebtoken.
-Da co dang ky, dang nhap, JWT, doc/tim kiem/sap xep public va ghi tin theo quyen tac gia.
-Chua co upload, xoa file hoac frontend.
+Backend quản lý tin tức cho **Nhiệm vụ 17**: đăng ký/đăng nhập, JWT, đọc tin public,
+thêm/sửa/xóa theo quyền tác giả, tìm kiếm/sắp xếp/phân trang và upload/xóa ảnh.
+Không có frontend hoặc tích hợp ảnh vào tin tức.
 
-## Chay local
+Repository: [Giang-Nguyen-2005/news-api-nodejs](https://github.com/Giang-Nguyen-2005/news-api-nodejs).
 
-Yeu cau Node.js 22 tro len (de dung `node --watch`, `node:test` va `fetch`).
+## Công nghệ
+
+| Thành phần | Công nghệ thực tế |
+| --- | --- |
+| Ngôn ngữ, HTTP | JavaScript, Node.js, Express |
+| Database | SQLite qua better-sqlite3 |
+| Xác thực | jsonwebtoken (JWT HS256), bcryptjs (hash mật khẩu, cost 10) |
+| Upload | Multer nhận multipart trong bộ nhớ; Sharp giải mã ảnh thật |
+| Cấu hình, test | dotenv; node:test, assert, fetch có sẵn trong Node.js |
+
+Đã kiểm tra trên **Windows, Node.js 22.20.0, npm 10.9.3**. Dùng Node.js 22 hoặc
+bản được dependency hỗ trợ. Không cần cài database server riêng.
+
+## Cài đặt và chạy
+
+PowerShell, từ thư mục muốn đặt bản clone mới:
 
 ```powershell
+git clone https://github.com/Giang-Nguyen-2005/news-api-nodejs.git
+cd news-api-nodejs
 npm ci
 Copy-Item .env.example .env
-# Tao JWT_SECRET ngau nhien trong .env; chi chay sau khi copy file mau.
-node -e "const fs = require('node:fs'); fs.writeFileSync('.env', fs.readFileSync('.env', 'utf8').replace(/^JWT_SECRET=$/m, 'JWT_SECRET=' + require('node:crypto').randomBytes(32).toString('hex')));"
+# Tạo secret ngẫu nhiên ngay trong .env, không in secret.
+node -e "const fs=require('node:fs'); const crypto=require('node:crypto'); fs.writeFileSync('.env', fs.readFileSync('.env','utf8').replace(/^JWT_SECRET=[^\r\n]*/m, 'JWT_SECRET='+crypto.randomBytes(32).toString('hex')));"
 npm start
 ```
 
-`npm run dev` tu khoi dong lai khi source thay doi. `npm test` chay test toi thieu
-bang Node.js, khong can cai them framework.
+Chỉ copy file mẫu khi **chưa có .env**, tránh ghi đè cấu hình. Với project đang
+có tại `C:\Users\Giang\API`, vào thư mục đó rồi cài đặt, không clone lại.
+`npm run dev` tự chạy lại khi sửa code; `Ctrl+C` dừng server.
 
-## Bien moi truong va cau hinh dung chung
+Server mặc định: `http://localhost:3000`. Thử:
 
-| Bien | Mac dinh | Gia tri hop le |
+```powershell
+curl.exe -i http://localhost:3000/health
+```
+
+## Biến môi trường và cấu hình dùng chung
+
+| Biến | Mặc định | Điều kiện/ý nghĩa |
 | --- | --- | --- |
-| PORT | 3000 | So nguyen tu 1 den 65535 |
-| NODE_ENV | development | development, test, production |
-| DB_PATH | ./data/news.db | Duong dan database SQLite; duong dan tuong doi tinh tu thu muc project |
-| JWT_SECRET | Khong co | Secret ngau nhien it nhat 32 ky tu, bat buoc |
-| JWT_EXPIRES_IN | 3600 | So nguyen duong, don vi giay (mac dinh 1 gio) |
+| PORT | 3000 | Số nguyên 1–65535 |
+| NODE_ENV | development | development, test hoặc production |
+| DB_PATH | ./data/news.db | File SQLite, tương đối tính từ root project |
+| JWT_SECRET | Không có | Bắt buộc, ít nhất 32 ký tự; nên tạo ngẫu nhiên như trên |
+| JWT_EXPIRES_IN | 3600 | Số nguyên dương, thời hạn token theo giây |
+| UPLOAD_DIR | ./uploads | Thư mục ảnh, tương đối tính từ root project |
 
-JWT_SECRET phai duoc thiet lap trong `.env` hoac bien moi truong cua process.
-Bien moi truong cua process duoc uu tien hon `.env`.
-Cau hinh khong hop le se dung ung dung voi thong bao loi.
-`.env` da duoc bo qua boi Git; chi commit `.env.example` khong chua thong tin nhay cam.
-
-`src/config/env.js` nap dotenv va export cau hinh dung chung, khong dung `global`.
-Vi du trong `src/server.js`:
+Biến process ưu tiên hơn .env. `src/config/env.js` nạp dotenv, kiểm tra PORT,
+NODE_ENV, JWT_SECRET, JWT_EXPIRES_IN và export cấu hình chung, không dùng global.
+Ví dụ trong server:
 
 ```javascript
 const { port, nodeEnv } = require('./config/env');
 ```
 
-Server dung `port` de lang nghe va `nodeEnv` trong log khoi dong. Error middleware
-cung dung `nodeEnv` de bo log loi khi chay voi `NODE_ENV=test`.
+`database.js` quản lý SQLite; `files.js` quản lý upload root/giới hạn ảnh.
+Không commit .env, secret, token thật hoặc dữ liệu cá nhân. Đổi JWT_SECRET làm
+token cũ không hợp lệ.
 
-## Cau truc project
+## Cấu trúc thư mục
 
 ```text
 src/
-  app.js
-  server.js
+  app.js                       # JSON parser, routes, middleware 404/500
+  server.js                    # Khởi động HTTP server
   config/
     env.js
     database.js
+    files.js
   controllers/
     healthController.js
     authController.js
     newsController.js
+    fileController.js
   routes/
     healthRoutes.js
     authRoutes.js
     newsRoutes.js
+    fileRoutes.js
   middlewares/
-    .gitkeep
+    authenticate.js
+    validateAuth.js
+    upload.js
     notFound.js
     errorHandler.js
-    validateAuth.js
-    authenticate.js
   models/
-    .gitkeep
     userModel.js
     newsModel.js
+    fileModel.js
   services/
-    .gitkeep
     authService.js
     newsService.js
+    fileService.js
   utils/
-    .gitkeep
     response.js
     httpError.js
 test/
@@ -86,7 +109,15 @@ test/
   news.test.js
   news-write.test.js
   news-query.test.js
-data/                  # Database local tu tao, khong commit
+  files.test.js
+docs/
+  postman.md                    # Quy trình thực hành 11 bước
+  files.md                      # Chi tiết API file
+  verification.md               # Đối chiếu yêu cầu, kết quả kiểm tra
+postman/
+  News-API.postman_collection.json
+data/                          # Database local, không track
+uploads/                       # Ảnh và thư mục test tạm, không track
 .env.example
 .gitignore
 package.json
@@ -94,506 +125,170 @@ package-lock.json
 README.md
 ```
 
+Không liệt kê node_modules, .env và file giữ chỗ .gitkeep trong cây trên.
+
 ## Request/Response
 
-Response thanh cong dung helper `sendSuccess(res, message, data, statusCode)`.
-Response loi dung `sendError(res, message, statusCode, errors)`. `data` va `errors`
-mac dinh la `null`; status thanh cong mac dinh la 200, status loi mac dinh la 500.
+Request thường dùng `Content-Type: application/json`. Upload dùng multipart/form-data,
+chỉ một field kiểu **File** tên `file`.
 
-### Health: HTTP 200
-
-```powershell
-curl.exe -i http://localhost:3000/health
-```
+Thành công qua `sendSuccess`, ví dụ health → HTTP 200:
 
 ```json
-{
-  "success": true,
-  "message": "Server is running",
-  "data": { "status": "ok" }
-}
+{"success":true,"message":"Server is running","data":{"status":"ok"}}
 ```
 
-`GET /api/health` cua giai doan 1 van hoat dong va tra cung response.
-
-### Route khong ton tai: HTTP 404
-
-```powershell
-curl.exe -i http://localhost:3000/does-not-exist
-```
+Lỗi qua `sendError`, ví dụ route không tồn tại → HTTP 404:
 
 ```json
-{
-  "success": false,
-  "message": "Khong tim thay API",
-  "data": null,
-  "errors": null
-}
+{"success":false,"message":"Khong tim thay API","data":null,"errors":null}
 ```
 
-### JSON khong hop le: HTTP 400
+Message API hiện không dấu hoặc tiếng Anh theo code. `errors` có trong response
+lỗi, không bắt buộc khi thành công. HTTP 200: thành công; 201: đã tạo; 400: đầu vào
+sai; 401: token/thông tin đăng nhập sai; 403: không có quyền; 404: không tồn tại;
+409: tài khoản trùng; 413: file quá lớn; 500: lỗi server, không lộ SQL/stack/path.
 
-```powershell
-Invoke-WebRequest -Uri http://localhost:3000/health -Method Post -ContentType 'application/json' -Body '{invalid json'
-```
+## Danh sách API thực tế
+
+| Method | Endpoint | Quyền | Thành công: trường trong data |
+| --- | --- | --- | --- |
+| GET | /health | Public | 200: status |
+| GET | /api/health | Public, alias | 200: status |
+| POST | /api/auth/register | Public | 201: user |
+| POST | /api/auth/login | Public | 200: user, accessToken, tokenType, expiresIn |
+| GET | /api/auth/me | JWT | 200: user |
+| GET | /api/news | Public | 200: news[], pagination |
+| GET | /api/news/:id | Public | 200: news |
+| POST | /api/news | JWT | 201: news |
+| PUT | /api/news/:id | JWT, tác giả | 200: news |
+| DELETE | /api/news/:id | JWT, tác giả | 200: id |
+| POST | /api/files/upload | JWT | 201: file |
+| DELETE | /api/files/:id | JWT, người upload | 200: id |
+
+### Đăng ký, đăng nhập, JWT
+
+Body register:
 
 ```json
-{
-  "success": false,
-  "message": "JSON khong hop le",
-  "data": null,
-  "errors": null
-}
+{"username":"sinhvien_demo","email":"sinhvien@example.com","password":"DemoPass123!"}
 ```
 
-JSON duoc kiem tra truoc khi tim route, nen request nay nhan 400.
+Username/email không trùng; email hợp lệ; password từ 8 ký tự, tối đa 72 byte UTF-8.
+Email trim/chuyển chữ thường, username trim. Chỉ lưu hash. Body login dùng email,
+password như trên. Sai email/password cùng nhận thông báo chung 401; thiếu trường
+hoặc email sai định dạng nhận 400.
 
-### Loi server: HTTP 500
+Lấy `data.accessToken` từ login, dùng cho me và API private:
+
+```http
+Authorization: Bearer <accessToken nhận từ login>
+```
+
+Token mặc định 1 giờ. Me trả id, username, email, created_at, không có password/hash.
+Token thiếu/sai/hết hạn hoặc tài khoản không còn → 401.
+
+### Tin tức
+
+GET danh sách/chi tiết không cần token. Tin gồm id, title, content,
+`author: {id, username}`, created_at, updated_at; không có email/hash tác giả.
+POST và PUT đều cần cả hai trường:
 
 ```json
-{
-  "success": false,
-  "message": "Loi server",
-  "data": null,
-  "errors": null
-}
+{"title":"Học NodeJS","content":"Nội dung bài học Express và SQLite."}
 ```
 
-Error middleware duoc gan cuoi cung, sau middleware 404. Loi noi bo va stack trace
-khong duoc gui ve client. Test tao mot Express app rieng de gia lap loi va kiem tra
-middleware 500; ung dung chinh khong co endpoint co tinh gay loi.
+Title/content phải là chuỗi không rỗng sau trim. Tác giả lấy từ JWT, bỏ qua
+client author_id. PUT thay hai trường, cập nhật updated_at UTC, giữ nguyên tác giả
+và created_at. Người khác sửa/xóa → 403; ID sai → 400; không tồn tại → 404.
+SQL có điều kiện author_id và transaction IMMEDIATE bảo vệ quyền trong thao tác.
 
-## SQLite va bang users
+### Tìm kiếm, sắp xếp, phân trang
 
-Database va thu muc cha duoc tao tu dong khi khoi dong. Khong can cai MySQL hoac
-SQLite server. Da kiem tra better-sqlite3 tren Node.js 22.20.0 Windows;
-[tai lieu better-sqlite3](https://github.com/WiseLibs/better-sqlite3).
+```http
+GET /api/news?search=nodejs&sortBy=title&order=asc&page=1&limit=5
+```
 
-| Cot | Kieu va rang buoc |
-| --- | --- |
-| id | INTEGER PRIMARY KEY AUTOINCREMENT |
-| username | TEXT NOT NULL COLLATE NOCASE UNIQUE |
-| email | TEXT NOT NULL COLLATE NOCASE UNIQUE |
-| password_hash | TEXT NOT NULL, bcrypt cost 10 |
-| created_at | TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP (UTC) |
-
-Email duoc trim va chuyen ve chu thuong, username duoc trim. SQLite NOCASE ngan
-trung khong phan biet hoa/thuong cho ky tu ASCII. Truy van dung placeholder,
-rang buoc UNIQUE bao ve ca request dong thoi. Mat khau toi thieu 8 ky tu, toi da
-72 byte UTF-8 de tranh bcrypt cat bot mat khau. Database local, file journal va
-`.env` deu bi Git bo qua. Khong commit tai khoan that.
-
-## API xac thuc
-
-| Method | Endpoint | Ket qua |
+| Query | Mặc định | Điều kiện |
 | --- | --- | --- |
-| POST | /api/auth/register | 201; thong tin thieu/sai: 400; username/email trung: 409 |
-| POST | /api/auth/login | 200; thieu/sai dinh dang: 400; sai thong tin dang nhap: 401 |
-| GET | /api/auth/me | 200; token thieu/sai/het han hoac tai khoan khong con: 401 |
-
-### Dang ky
-
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{"username":"giang","email":"giang@example.com","password":"12345678"}
-```
-
-HTTP 201 (id va created_at phu thuoc du lieu):
-
-```json
-{
-  "success": true,
-  "message": "Dang ky thanh cong",
-  "data": {
-    "user": {"id":1,"username":"giang","email":"giang@example.com","created_at":"2026-10-26 10:00:00"}
-  }
-}
-```
-
-### Dang nhap
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{"email":"giang@example.com","password":"12345678"}
-```
-
-HTTP 200 (`accessToken` ben duoi chi la placeholder):
-
-```json
-{
-  "success": true,
-  "message": "Dang nhap thanh cong",
-  "data": {
-    "user": {"id":1,"username":"giang","email":"giang@example.com","created_at":"2026-10-26 10:00:00"},
-    "accessToken": "<JWT access token>",
-    "tokenType": "Bearer",
-    "expiresIn": 3600
-  }
-}
-```
-
-JWT duoc ky HS256, co subject la user id va thoi diem het han. Middleware chi chap
-nhan HS256 va kiem tra tai khoan con ton tai. Doi JWT_SECRET se vo hieu token cu.
-
-Sai mat khau va email khong ton tai cung tra HTTP 401:
-
-```json
-{"success":false,"message":"Email hoac mat khau khong dung","data":null,"errors":null}
-```
-
-### Lay tai khoan hien tai
-
-```http
-GET /api/auth/me
-Authorization: Bearer <accessToken nhan tu login>
-```
-
-HTTP 200:
-
-```json
-{
-  "success": true,
-  "message": "Lay thong tin tai khoan thanh cong",
-  "data": {
-    "user": {"id":1,"username":"giang","email":"giang@example.com","created_at":"2026-10-26 10:00:00"}
-  }
-}
-```
-
-Token thieu/sai/het han tra HTTP 401 voi `success: false`, `data: null`,
-`errors: null`, message `Token khong hop le hoac da het han`.
-Loi database bat ngo tra HTTP 500 `Loi server`, khong lo SQL hoac stack trace.
-Moi response tai khoan chi co id, username, email, created_at; khong co password
-hoac password_hash.
-
-### Thu nhanh bang PowerShell
-
-```powershell
-$body = @{ username = 'giang'; email = 'giang@example.com'; password = '12345678' } | ConvertTo-Json
-Invoke-RestMethod http://localhost:3000/api/auth/register -Method Post -ContentType 'application/json' -Body $body
-$loginBody = @{ email = 'giang@example.com'; password = '12345678' } | ConvertTo-Json
-$login = Invoke-RestMethod http://localhost:3000/api/auth/login -Method Post -ContentType 'application/json' -Body $loginBody
-Invoke-RestMethod http://localhost:3000/api/auth/me -Headers @{ Authorization = "Bearer $($login.data.accessToken)" }
-```
-
-## Kiem thu
-
-`npm test` chay lai test giai doan 2 va test xac thuc. Moi file test thiet lap
-`NODE_ENV=test`, `DB_PATH=:memory:` va JWT_SECRET ngau nhien truoc khi import app.
-Database test tach rieng trong bo nho, khong mo hoac xoa database su dung thuc te.
-Test bao gom validation, trung tai khoan (ke ca request dong thoi), bcrypt,
-JWT co han, token sai/het han, response khong chua hash, va loi database 500.
-
-## Bang news (giai doan 4)
-
-Bang duoc bo sung bang `CREATE TABLE IF NOT EXISTS` trong database SQLite hien co.
-Khong xoa/tao lai bang users, khong them du lieu tin tuc mau vao database local.
-
-| Cot | Kieu va rang buoc |
-| --- | --- |
-| id | INTEGER PRIMARY KEY AUTOINCREMENT |
-| title | TEXT NOT NULL, CHECK khong rong sau khi trim |
-| content | TEXT NOT NULL, CHECK khong rong sau khi trim |
-| author_id | INTEGER NOT NULL, FOREIGN KEY den users(id), ON DELETE RESTRICT |
-| created_at | TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP (UTC) |
-| updated_at | TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP (UTC) |
-
-Bat `PRAGMA foreign_keys = ON` tren connection. Co index theo
-`created_at DESC, id DESC` cho danh sach va index `author_id`.
-`updated_at` duoc gan luc tao va cap nhat theo UTC khi sua thanh cong. API PUT
-dung do chinh xac mili giay. `created_at` va `author_id` khong thay doi khi sua.
-
-## API public doc tin tuc
-
-Hai endpoint deu khong can JWT. `author` chi co `id`, `username`, khong tra email,
-password hay password_hash. SQL dung placeholder cho ID, LIMIT va OFFSET.
-
-| Method | Endpoint | Ket qua |
-| --- | --- | --- |
-| GET | /api/news?page=1&limit=10 | 200, danh sach va thong tin phan trang |
-| GET | /api/news/:id | 200, chi tiet tin tuc |
-
-### Danh sach
-
-```powershell
-curl.exe -i 'http://localhost:3000/api/news?page=1&limit=10'
-```
-
-Mac dinh `page=1`, `limit=10`. Ca hai phai la chuoi so nguyen duong, khong chap
-nhan so thap phan, so am, ky tu la hay tham so lap. `limit` toi da 100; page, id
-va offset phai trong mien so nguyen an toan cua JavaScript. Gia tri khong hop le
-tra HTTP 400. Tin moi nhat truoc theo `created_at DESC`, cung thoi diem thi `id DESC`.
-
-Vi du HTTP 200 khi co du lieu (du lieu minh hoa, khong duoc seed vao database):
-
-```json
-{
-  "success": true,
-  "message": "Lay danh sach tin tuc thanh cong",
-  "data": {
-    "news": [
-      {
-        "id": 1,
-        "title": "Tieu de tin tuc",
-        "content": "Noi dung tin tuc",
-        "author": { "id": 1, "username": "giang" },
-        "created_at": "2026-10-26 10:00:00",
-        "updated_at": "2026-10-26 10:00:00"
-      }
-    ],
-    "pagination": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
-  }
-}
-```
-
-Database chua co tin tuc van tra HTTP 200:
-
-```json
-{
-  "success": true,
-  "message": "Lay danh sach tin tuc thanh cong",
-  "data": {
-    "news": [],
-    "pagination": { "page": 1, "limit": 10, "total": 0, "totalPages": 0 }
-  }
-}
-```
-
-Page vuot trang cuoi tra `news: []` va giu nguyen `total`, `totalPages`.
-
-### Chi tiet
-
-```powershell
-curl.exe -i http://localhost:3000/api/news/1
-```
-
-HTTP 200 khi ID ton tai:
-
-```json
-{
-  "success": true,
-  "message": "Lay chi tiet tin tuc thanh cong",
-  "data": {
-    "news": {
-      "id": 1,
-      "title": "Tieu de tin tuc",
-      "content": "Noi dung tin tuc",
-      "author": { "id": 1, "username": "giang" },
-      "created_at": "2026-10-26 10:00:00",
-      "updated_at": "2026-10-26 10:00:00"
-    }
-  }
-}
-```
-
-ID khong hop le (vi du `/api/news/abc`, `/api/news/0`) tra HTTP 400:
-
-```json
-{"success":false,"message":"ID khong hop le","data":null,"errors":null}
-```
-
-ID hop le nhung khong ton tai tra HTTP 404:
-
-```json
-{"success":false,"message":"Khong tim thay tin tuc","data":null,"errors":null}
-```
-
-Loi database bat ngo dung middleware hien co, tra HTTP 500 `Loi server`, khong
-lo truy van hoac stack trace. `/api/news/` la danh sach; chi tiet can co `:id`.
-
-### Test tin tuc
-
-`test/news.test.js` dung SQLite `:memory:` rieng va du lieu mau chi trong test.
-Test danh sach rong/co du lieu, thu tu on dinh, chi tiet, phan trang, ID khong
-hop le/khong ton tai, API public, khong lo thong tin rieng, khoa ngoai va loi 500.
-`npm test` chay ca test news va toan bo test giai doan 2, 3.
-
-## API private ghi tin tuc (giai doan 5)
-
-Dang nhap qua `POST /api/auth/login`, lay `data.accessToken` va gui header:
-
-```http
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-```
-
-| Method | Endpoint | Thanh cong |
-| --- | --- | --- |
-| POST | /api/news | 201, `data.news` chua tin vua tao |
-| PUT | /api/news/:id | 200, `data.news` chua tin da sua |
-| DELETE | /api/news/:id | 200, `data.id` la ID vua xoa |
-
-POST va PUT can ca `title` va `content`, deu phai la chuoi khong rong sau khi
-trim; server luu gia tri da trim. PUT cap nhat ca hai truong. Thieu body, sai
-kieu hoac chuoi chi co khoang trang tra 400. Chi title/content duoc lay tu body;
-author_id luon lay tu `req.user.id` do middleware JWT xac thuc. Client khong the
-gan tac gia, doi tac gia, doi id hay thoi gian tao qua body.
-
-Thieu, sai hoac het han JWT tra 401. ID sai tra 400. Tin khong ton tai tra 404.
-Tai khoan khac tac gia khong duoc sua/xoa, tra 403 va khong thay doi du lieu.
-Loi database bat ngo tra 500 `Loi server`, khong gui SQL hoac stack trace.
-GET danh sach/chi tiet van public va khong can Authorization.
-
-### Them tin
-
-```http
-POST /api/news
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-
-{"title":"Tin moi","content":"Noi dung tin moi"}
-```
-
-HTTP 201 (id va thoi gian la vi du):
-
-```json
-{
-  "success": true,
-  "message": "Them tin tuc thanh cong",
-  "data": {
-    "news": {
-      "id": 1,
-      "title": "Tin moi",
-      "content": "Noi dung tin moi",
-      "author": { "id": 1, "username": "giang" },
-      "created_at": "2026-10-26 10:00:00",
-      "updated_at": "2026-10-26 10:00:00"
-    }
-  }
-}
-```
-
-### Sua tin cua minh
-
-```http
-PUT /api/news/1
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-
-{"title":"Tieu de da sua","content":"Noi dung da sua"}
-```
-
-HTTP 200 co `success: true`, message `Sua tin tuc thanh cong`, `data.news`
-co cau truc nhu response them tin, title/content moi va updated_at da cap nhat.
-
-Vi du HTTP 403 neu tai khoan khac sua:
-
-```json
-{"success":false,"message":"Ban khong co quyen sua tin tuc nay","data":null,"errors":null}
-```
-
-### Xoa tin cua minh
-
-```http
-DELETE /api/news/1
-Authorization: Bearer <accessToken>
-```
-
-HTTP 200:
-
-```json
-{"success":true,"message":"Xoa tin tuc thanh cong","data":{"id":1}}
-```
-
-### Quyen so huu va transaction
-
-Model sua/xoa bang SQL parameterized voi `WHERE id = ? AND author_id = ?`.
-Moi thao tac chay trong transaction `IMMEDIATE` (giu write lock) gom ghi,
-kiem tra ton tai de phan biet 403/404 va doc lai ket qua. Khong co khoang trong
-giua kiem tra quyen va thao tac de connection khac thay doi quyen so huu.
-Neu co loi, SQLite rollback transaction; middleware cu tra response loi chung.
-
-### Thu bang PowerShell sau khi dang nhap
-
-```powershell
-$headers = @{ Authorization = "Bearer $($login.data.accessToken)" }
-$body = @{ title = 'Tin moi'; content = 'Noi dung tin moi' } | ConvertTo-Json
-$created = Invoke-RestMethod http://localhost:3000/api/news -Method Post -Headers $headers -ContentType 'application/json' -Body $body
-$id = $created.data.news.id
-$updatedBody = @{ title = 'Tieu de da sua'; content = 'Noi dung da sua' } | ConvertTo-Json
-Invoke-RestMethod "http://localhost:3000/api/news/$id" -Method Put -Headers $headers -ContentType 'application/json' -Body $updatedBody
-Invoke-RestMethod "http://localhost:3000/api/news/$id" -Method Delete -Headers $headers
-```
-
-`test/news-write.test.js` dung SQLite trong bo nho rieng, hai tai khoan test
-va JWT ky bang secret ngau nhien. Test ca quyen so huu, body gia mao author_id,
-du lieu sai, token thieu/sai/het han, updated_at, rollback va GET public.
-Chay `npm test` de chay ca test ghi va baseline 62 test cua giai doan 4.
-
-## Tim kiem va sap xep (giai doan 6)
-
-Mo rong `GET /api/news`, khong can JWT va khong tao endpoint moi. Cau truc
-`success`, `message`, `data.news`, `data.pagination` giu nguyen.
-Khong thay doi schema database, CRUD hoac quyen tac gia.
-
-| Query | Mac dinh | Gia tri hop le |
-| --- | --- | --- |
-| search | Chuoi rong | Chuoi toi da 200 ky tu sau trim, khong chua NUL |
+| search | Rỗng | Chuỗi sau trim ≤200 ký tự, không NUL; tìm trong title/content |
 | sortBy | created_at | created_at, updated_at, title |
-| order | desc | asc, desc (chu thuong) |
-| page | 1 | So nguyen duong trong mien an toan |
-| limit | 10 | So nguyen tu 1 den 100 |
+| order | desc | asc hoặc desc, chữ thường |
+| page | 1 | Số nguyên dương trong miền an toàn JavaScript |
+| limit | 10 | Số nguyên 1–100; offset cũng phải an toàn |
 
-Tham so lap lai (vi du `search=a&search=b`) hoac gia tri sai tra HTTP 400.
-Khong co search, search rong hoac chi co khoang trang thi tra danh sach binh thuong.
-Server trim search; tim chuoi con trong title HOAC content, khong phan biet
-hoa/thuong ASCII. Khong cam ket case folding cho Unicode co dau.
-Ky tu `%`, `_` va `\` duoc tim nhu van ban thuong, khong phai wildcard.
+Tham số sai/lặp → 400. Search rỗng/whitespace trả danh sách thường. Tìm chuỗi con
+không phân biệt hoa/thường ASCII; %, _ và backslash là ký tự thường. Dùng placeholder
+cho search, allowlist cho sort; trùng giá trị dùng id cùng chiều. Sort title theo
+TEXT/BINARY của SQLite, không cam kết thứ tự ngôn ngữ Việt.
 
-Truy van dung `instr(lower(...), lower(?))` voi keyword duoc bind bang placeholder.
-Danh sach va COUNT dung cung dieu kien, vi vay `pagination.total` la tong bai
-phu hop, khong phai tong toan bang; bai khop ca title/content chi dem mot lan.
-Khong co ket qua van tra HTTP 200, news rong, total va totalPages bang 0.
+`pagination.total` là số bài sau lọc. Không có kết quả vẫn trả 200:
 
-Cot va chieu ORDER BY chi lay tu mapping SQL co dinh sau khi kiem tra allowlist,
-khong chen input tho vao SQL. Cung gia tri sap xep thi dung `id` cung chieu:
-`asc` kem `id ASC`, `desc` kem `id DESC`. Mac dinh van la created_at DESC, id DESC.
-Sort title dung thu tu TEXT/BINARY mac dinh cua SQLite; chi tim kiem moi khong
-phan biet hoa/thuong ASCII. Neu chi truyen order thi dung created_at; neu chi
-truyen sortBy thi dung desc.
+```json
+{"success":true,"message":"Lay danh sach tin tuc thanh cong","data":{"news":[],"pagination":{"page":1,"limit":5,"total":0,"totalPages":0}}}
+```
 
-### Vi du request
+### Upload/xóa file
 
 ```powershell
-curl.exe -i 'http://localhost:3000/api/news?search=nodejs'
-curl.exe -i 'http://localhost:3000/api/news?sortBy=updated_at&order=desc'
-curl.exe -i 'http://localhost:3000/api/news?sortBy=title&order=asc'
-curl.exe -i 'http://localhost:3000/api/news?search=nodejs&sortBy=title&order=asc&page=1&limit=5'
+curl.exe -i -X POST http://localhost:3000/api/files/upload -H "Authorization: Bearer <accessToken>" -F "file=@C:/path/to/photo.png"
 ```
 
-Vi du HTTP 200 khi co mot bai phu hop (chi la du lieu minh hoa):
+Chỉ một field file, không thêm field khác. JPG/JPEG, PNG, WEBP tối đa **5 MiB**
+(5 × 1024 × 1024 byte), tối đa 16 × 1024 × 1024 pixel. Sharp giải mã ảnh thật;
+MIME/extension phải khớp nội dung. Lưu tên UUID, không dùng tên gốc làm path.
+Response 201 chứa `data.file`: id, filename, size, mimetype, uploaded_by, created_at.
+Không có path tuyệt đối/URL public. Xóa bằng ID:
+
+```http
+DELETE /api/files/1
+Authorization: Bearer <accessToken>
+```
+
+Chỉ người upload được xóa. Response 200:
 
 ```json
-{
-  "success": true,
-  "message": "Lay danh sach tin tuc thanh cong",
-  "data": {
-    "news": [
-      {
-        "id": 1,
-        "title": "Hoc NodeJS",
-        "content": "Noi dung bai hoc",
-        "author": { "id": 1, "username": "giang" },
-        "created_at": "2026-10-27 10:00:00",
-        "updated_at": "2026-10-27 10:00:00"
-      }
-    ],
-    "pagination": { "page": 1, "limit": 5, "total": 1, "totalPages": 1 }
-  }
-}
+{"success":true,"message":"Xoa file thanh cong","data":{"id":1}}
 ```
 
-Vi du `sortBy=id` tra HTTP 400:
+Xóa cả metadata/file; file trên đĩa đã mất vẫn dọn metadata. Có kiểm tra traversal
+và symlink, không có static route uploads. Chi tiết: [docs/files.md](docs/files.md).
 
-```json
-{"success":false,"message":"sortBy khong hop le","data":null,"errors":null}
+## Thực hành Postman
+
+Import [collection](postman/News-API.postman_collection.json), baseUrl mặc định
+`http://localhost:3000`. Export ban đầu để token/ID rỗng; collection lưu sau login
+và tạo dữ liệu. Chọn ảnh trên máy cho field upload trước khi gửi.
+
+Thứ tự: health → register → login → tạo tin → danh sách → chi tiết → tìm/sort → sửa
+→ upload → xóa ảnh → xóa tin. Chi tiết Method, URL, Headers, Body và kết quả tại
+[docs/postman.md](docs/postman.md). Có thêm me và alias health.
+Dùng tài khoản demo mới nếu đã đăng ký; không export token/dữ liệu cá nhân sau khi chạy.
+
+## Kiểm thử và đối chiếu
+
+```powershell
+npm test
+npm audit
 ```
 
-`test/news-query.test.js` dung database rieng trong bo nho, test tim kiem theo hai
-truong, ASCII case, khong co ket qua, ky tu wildcard/SQL duoc coi la van ban,
-sort tang/giam theo ba cot, tie-breaker va phan trang ket hop. `npm test` chay
-ca baseline 112 test giai doan 5, khong tac dong database that.
+**188/188 test PASS**, gồm health/404/500, auth/JWT, public/private, quyền tác giả,
+search/sort/phân trang, upload thật và rollback. Test dùng SQLite :memory: và thư
+mục tạm riêng trong uploads, tự dọn và không sửa dữ liệu thật.
+Bằng chứng từng yêu cầu và kiểm tra route: [docs/verification.md](docs/verification.md).
+
+## SQLite, lưu trữ và giới hạn
+
+- Bảng users/news/files được tạo bằng CREATE TABLE IF NOT EXISTS, không seed dữ liệu
+  thật. Bật khóa ngoại, username/email UNIQUE với NOCASE (ASCII). Timestamp UTC.
+  Không cần xóa database để chạy lại bài.
+- Khi sao lưu, dừng server và sao lưu cả database/uploads. Không sửa filename trong
+  metadata hoặc xóa file thủ công. Tắt đột ngột/lỗi cả bước bù trừ có thể làm lệch
+  file/metadata: SQLite và filesystem không có commit chung.
+- .gitignore bỏ qua node_modules, .env, data, uploads, database/journal. Nếu đổi
+  đường dẫn dữ liệu, bổ sung ignore tương ứng trước khi commit.
+- npm 10.9.3 báo @img/sharp-wasm32, @emnapi/runtime, tslib là extraneous sau npm ci.
+  Chúng thuộc nhánh WASM tùy chọn của Sharp; thực tế dùng binary sharp-win32-x64.
+  Cài sạch, 188 test và audit đạt; không đổi dependency để che cảnh báo.
+- Chưa có refresh token, admin, download ảnh, frontend hoặc deploy; không mô tả
+  những chức năng này là đã hoàn thành.

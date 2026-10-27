@@ -1,7 +1,7 @@
-# API file - giai doan 7
+# API upload và xóa file
 
-Ca hai endpoint bat buoc `Authorization: Bearer <accessToken>` tu API login.
-Khong tao public static route cho uploads, khong lien ket file voi tin tuc.
+Cả hai endpoint cần `Authorization: Bearer <accessToken>` từ login. Không có
+static route công khai uploads hoặc tích hợp ảnh vào tin tức.
 
 ## Upload
 
@@ -9,14 +9,12 @@ Khong tao public static route cho uploads, khong lien ket file voi tin tuc.
 curl.exe -i -X POST http://localhost:3000/api/files/upload -H "Authorization: Bearer <accessToken>" -F "file=@C:/path/to/photo.png"
 ```
 
-Gui multipart/form-data, dung mot field `file`, khong gui them file/field khac.
-Nhan JPG/JPEG, PNG, WEBP toi da 5 * 1024 * 1024 byte. MIME va extension phai
-khop dinh dang thuc. Multer nhan trong bo nho; Sharp doc metadata va giai ma
-pixel (`stats`) de tu choi file hong/gia mao, gioi han 16 * 1024 * 1024 pixel.
-Ten goc khong duoc dung lam duong dan luu; server tao UUID va extension theo
-dinh dang thuc, tao thu muc neu thieu va ghi file voi che do `wx` tranh ghi de.
+Multipart/form-data, chỉ một field File tên `file`. Nhận JPG/JPEG, PNG, WEBP tối đa
+5 × 1024 × 1024 byte; MIME/extension phải khớp nội dung. Multer nhận trong bộ nhớ;
+Sharp đọc metadata và giải mã pixel bằng stats, giới hạn 16 × 1024 × 1024 pixel.
+Tên lưu là UUID với extension theo nội dung thật; ghi `wx` để tránh ghi đè.
 
-HTTP 201 (id, ten va thoi gian la minh hoa):
+HTTP 201, ví dụ minh họa:
 
 ```json
 {
@@ -35,44 +33,42 @@ HTTP 201 (id, ten va thoi gian la minh hoa):
 }
 ```
 
-Bang `files`: id INTEGER PRIMARY KEY AUTOINCREMENT; filename TEXT UNIQUE NOT NULL;
+Bảng files: id INTEGER PRIMARY KEY AUTOINCREMENT; filename TEXT UNIQUE NOT NULL;
 size INTEGER NOT NULL CHECK(size > 0); mimetype TEXT NOT NULL; uploaded_by INTEGER
 NOT NULL REFERENCES users(id) ON DELETE RESTRICT; created_at TEXT NOT NULL DEFAULT
-CURRENT_TIMESTAMP. Co index uploaded_by.
+CURRENT_TIMESTAMP. Có index uploaded_by. Không trả path tuyệt đối.
 
-## Xoa
+## Xóa
 
 ```powershell
 curl.exe -i -X DELETE http://localhost:3000/api/files/1 -H "Authorization: Bearer <accessToken>"
 ```
 
-Chi chu file duoc xoa. HTTP 200:
+Chỉ người upload được xóa. HTTP 200:
 
 ```json
 {"success":true,"message":"Xoa file thanh cong","data":{"id":1}}
 ```
 
-File tren dia da mat thi van xoa metadata va tra 200. Ten trong metadata phai
-dung mau UUID + extension, path phai nam trong upload root, khong chap nhan
-symbolic link. Kiem tra chu so huu va xoa chay trong transaction IMMEDIATE.
-Loi database khi upload thi rollback metadata va xoa file vua ghi; loi xoa
-metadata thi rollback va khoi phuc bytes da xoa. Khong co file tam tren dia.
-Filesystem va SQLite khong co commit chung: process/may bi tat dot ngot hoac
-loi ca thao tac bu tru van co the can doi soat thu cong, khong cam ket crash-atomic.
+File trên đĩa đã mất thì vẫn xóa metadata. Tên trong metadata phải đúng mẫu
+UUID/extension, path trong upload root, không chấp nhận symlink. Kiểm tra chủ sở hữu
+và xóa nằm trong transaction IMMEDIATE.
 
-| Loi | HTTP |
+Upload lỗi database: rollback metadata, xóa file vừa ghi. Xóa lỗi metadata:
+rollback và khôi phục bytes. Không ghi file tạm xuống đĩa. SQLite và filesystem
+không commit chung; tắt đột ngột hoặc lỗi cả bước bù trừ có thể cần đối soát thủ công.
+
+| Lỗi | HTTP |
 | --- | --- |
-| JWT thieu/sai/het han | 401 |
-| Thieu file, sai field, anh hong/sai loai, MIME/extension khong khop | 400 |
-| Vuot 5 MiB | 413 |
-| Khac nguoi upload | 403 |
-| ID sai / khong ton tai | 400 / 404 |
-| Loi server | 500, message chung, khong lo path/stack |
+| JWT thiếu/sai/hết hạn | 401 |
+| Thiếu file, sai field/loại ảnh, ảnh hỏng, MIME/extension không khớp | 400 |
+| Vượt 5 MiB | 413 |
+| Khác người upload | 403 |
+| ID sai / không tồn tại | 400 / 404 |
+| Server | 500, thông báo chung, không lộ stack/path |
 
-`UPLOAD_DIR` mac dinh `./uploads`, tinh tu root project. `.gitignore` da bo qua
-uploads. `.env` va database local cung khong duoc commit. Neu doi UPLOAD_DIR,
-giu thu muc du lieu ngoai Git. Test dung SQLite :memory: va thu muc mkdtemp
-rieng duoi uploads, duoc don sau test; khong cham file that.
+UPLOAD_DIR mặc định ./uploads, tính từ root project; tự tạo khi upload hợp lệ.
+Git bỏ qua uploads, .env và database local. Nếu đổi đường dẫn, bổ sung ignore tương ứng.
+Test dùng database bộ nhớ và thư mục tạm riêng, tự dọn, không chạm dữ liệu thật.
 
-Tai lieu ky thuat: [Multer](https://expressjs.com/en/resources/middleware/multer/),
-[Sharp constructor](https://sharp.pixelplumbing.com/api-constructor/).
+Xem [README](../README.md) để cài đặt và [Postman](postman.md) để thực hành theo thứ tự.
