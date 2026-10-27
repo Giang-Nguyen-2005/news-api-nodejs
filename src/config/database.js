@@ -32,6 +32,16 @@ database.exec(`
 
   CREATE INDEX IF NOT EXISTS news_created_at_id_idx ON news(created_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS news_author_id_idx ON news(author_id);
+
+  CREATE TABLE IF NOT EXISTS files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL UNIQUE,
+    size INTEGER NOT NULL CHECK (size > 0),
+    mimetype TEXT NOT NULL,
+    uploaded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS files_uploaded_by_idx ON files(uploaded_by);
 `);
 
 module.exports = database;

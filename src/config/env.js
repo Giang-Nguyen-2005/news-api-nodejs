@@ -3,6 +3,7 @@ require('dotenv').config({ quiet: true });
 const port = Number(process.env.PORT || 3000);
 const nodeEnv = process.env.NODE_ENV || 'development';
 const dbPath = process.env.DB_PATH || './data/news.db';
+const uploadDir = process.env.UPLOAD_DIR || './uploads';
 const jwtSecret = process.env.JWT_SECRET;
 const jwtExpiresIn = Number(process.env.JWT_EXPIRES_IN || 3600);
 
@@ -22,4 +23,4 @@ if (!Number.isSafeInteger(jwtExpiresIn) || jwtExpiresIn < 1) {
   throw new Error('JWT_EXPIRES_IN must be a positive integer in seconds');
 }
 
-module.exports = { port, nodeEnv, dbPath, jwtSecret, jwtExpiresIn };
+module.exports = { port, nodeEnv, dbPath, uploadDir, jwtSecret, jwtExpiresIn };
