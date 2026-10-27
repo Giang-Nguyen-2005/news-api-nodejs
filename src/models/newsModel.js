@@ -18,15 +18,37 @@ function toNews(row) {
   };
 }
 
-function findAll(limit, offset) {
-  return database.prepare(`${selectNews}
-    ORDER BY n.created_at DESC, n.id DESC
-    LIMIT ? OFFSET ?
-  `).all(limit, offset).map(toNews);
+function searchFilter(search) {
+  if (!search) return { sql: '', params: [] };
+
+  return {
+    sql: 'WHERE (instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.content), lower(?)) > 0)',
+    params: [search, search],
+  };
 }
 
-function count() {
-  return database.prepare('SELECT COUNT(*) AS total FROM news').get().total;
+function findAll(limit, offset, { search = '', sortBy = 'created_at', order = 'desc' } = {}) {
+  // Only these fixed SQL fragments may enter ORDER BY, never raw input.
+  const columns = new Map([
+    ['created_at', 'n.created_at'], ['updated_at', 'n.updated_at'], ['title', 'n.title'],
+  ]);
+  const directions = new Map([['asc', 'ASC'], ['desc', 'DESC']]);
+  const column = columns.get(sortBy);
+  const direction = directions.get(order);
+  if (!column || !direction) throw new Error('Invalid news sort options');
+
+  const filter = searchFilter(search);
+  return database.prepare(`${selectNews}
+    ${filter.sql}
+    ORDER BY ${column} ${direction}, n.id ${direction}
+    LIMIT ? OFFSET ?
+  `).all(...filter.params, limit, offset).map(toNews);
+}
+
+function count(search = '') {
+  const filter = searchFilter(search);
+  return database.prepare(`SELECT COUNT(*) AS total FROM news n ${filter.sql}`)
+    .get(...filter.params).total;
 }
 
 function findById(id) {

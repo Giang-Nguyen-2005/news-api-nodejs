@@ -24,9 +24,23 @@ function list(query) {
     throw httpError(400, 'page khong hop le');
   }
 
-  const total = newsModel.count();
+  const rawSearch = query.search === undefined ? '' : query.search;
+  if (typeof rawSearch !== 'string' || rawSearch.trim().length > 200 || rawSearch.includes('\0')) {
+    throw httpError(400, 'search khong hop le');
+  }
+  const search = rawSearch.trim();
+  const sortBy = query.sortBy === undefined ? 'created_at' : query.sortBy;
+  const order = query.order === undefined ? 'desc' : query.order;
+  if (!['created_at', 'updated_at', 'title'].includes(sortBy)) {
+    throw httpError(400, 'sortBy khong hop le');
+  }
+  if (!['asc', 'desc'].includes(order)) {
+    throw httpError(400, 'order khong hop le');
+  }
+
+  const total = newsModel.count(search);
   return {
-    news: newsModel.findAll(limit, offset),
+    news: newsModel.findAll(limit, offset, { search, sortBy, order }),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }

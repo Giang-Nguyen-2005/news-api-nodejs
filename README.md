@@ -1,9 +1,9 @@
 # News Management Backend API
 
-Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 5: API private them/sua/xoa tin tuc.
+Backend bai tap Nhiem vu 17, hien hoan thanh giai doan 6: tim kiem va sap xep tin tuc.
 Su dung JavaScript, Node.js, Express, SQLite (better-sqlite3), bcryptjs va jsonwebtoken.
-Da co dang ky, dang nhap, JWT, API doc public va API ghi tin tuc theo quyen tac gia.
-Chua co tim kiem hay sap xep tuy chinh, upload hoac frontend.
+Da co dang ky, dang nhap, JWT, doc/tim kiem/sap xep public va ghi tin theo quyen tac gia.
+Chua co upload, xoa file hoac frontend.
 
 ## Chay local
 
@@ -85,6 +85,7 @@ test/
   auth.test.js
   news.test.js
   news-write.test.js
+  news-query.test.js
 data/                  # Database local tu tao, khong commit
 .env.example
 .gitignore
@@ -522,3 +523,77 @@ Invoke-RestMethod "http://localhost:3000/api/news/$id" -Method Delete -Headers $
 va JWT ky bang secret ngau nhien. Test ca quyen so huu, body gia mao author_id,
 du lieu sai, token thieu/sai/het han, updated_at, rollback va GET public.
 Chay `npm test` de chay ca test ghi va baseline 62 test cua giai doan 4.
+
+## Tim kiem va sap xep (giai doan 6)
+
+Mo rong `GET /api/news`, khong can JWT va khong tao endpoint moi. Cau truc
+`success`, `message`, `data.news`, `data.pagination` giu nguyen.
+Khong thay doi schema database, CRUD hoac quyen tac gia.
+
+| Query | Mac dinh | Gia tri hop le |
+| --- | --- | --- |
+| search | Chuoi rong | Chuoi toi da 200 ky tu sau trim, khong chua NUL |
+| sortBy | created_at | created_at, updated_at, title |
+| order | desc | asc, desc (chu thuong) |
+| page | 1 | So nguyen duong trong mien an toan |
+| limit | 10 | So nguyen tu 1 den 100 |
+
+Tham so lap lai (vi du `search=a&search=b`) hoac gia tri sai tra HTTP 400.
+Khong co search, search rong hoac chi co khoang trang thi tra danh sach binh thuong.
+Server trim search; tim chuoi con trong title HOAC content, khong phan biet
+hoa/thuong ASCII. Khong cam ket case folding cho Unicode co dau.
+Ky tu `%`, `_` va `\` duoc tim nhu van ban thuong, khong phai wildcard.
+
+Truy van dung `instr(lower(...), lower(?))` voi keyword duoc bind bang placeholder.
+Danh sach va COUNT dung cung dieu kien, vi vay `pagination.total` la tong bai
+phu hop, khong phai tong toan bang; bai khop ca title/content chi dem mot lan.
+Khong co ket qua van tra HTTP 200, news rong, total va totalPages bang 0.
+
+Cot va chieu ORDER BY chi lay tu mapping SQL co dinh sau khi kiem tra allowlist,
+khong chen input tho vao SQL. Cung gia tri sap xep thi dung `id` cung chieu:
+`asc` kem `id ASC`, `desc` kem `id DESC`. Mac dinh van la created_at DESC, id DESC.
+Sort title dung thu tu TEXT/BINARY mac dinh cua SQLite; chi tim kiem moi khong
+phan biet hoa/thuong ASCII. Neu chi truyen order thi dung created_at; neu chi
+truyen sortBy thi dung desc.
+
+### Vi du request
+
+```powershell
+curl.exe -i 'http://localhost:3000/api/news?search=nodejs'
+curl.exe -i 'http://localhost:3000/api/news?sortBy=updated_at&order=desc'
+curl.exe -i 'http://localhost:3000/api/news?sortBy=title&order=asc'
+curl.exe -i 'http://localhost:3000/api/news?search=nodejs&sortBy=title&order=asc&page=1&limit=5'
+```
+
+Vi du HTTP 200 khi co mot bai phu hop (chi la du lieu minh hoa):
+
+```json
+{
+  "success": true,
+  "message": "Lay danh sach tin tuc thanh cong",
+  "data": {
+    "news": [
+      {
+        "id": 1,
+        "title": "Hoc NodeJS",
+        "content": "Noi dung bai hoc",
+        "author": { "id": 1, "username": "giang" },
+        "created_at": "2026-10-27 10:00:00",
+        "updated_at": "2026-10-27 10:00:00"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 5, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+Vi du `sortBy=id` tra HTTP 400:
+
+```json
+{"success":false,"message":"sortBy khong hop le","data":null,"errors":null}
+```
+
+`test/news-query.test.js` dung database rieng trong bo nho, test tim kiem theo hai
+truong, ASCII case, khong co ket qua, ky tu wildcard/SQL duoc coi la van ban,
+sort tang/giam theo ba cot, tie-breaker va phan trang ket hop. `npm test` chay
+ca baseline 112 test giai doan 5, khong tac dong database that.
